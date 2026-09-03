@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Create your free account — CryptoPegion{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="page-head" style="text-align:left;padding:0 0 6px">
+      <h1>Create your account</h1>
+      <p>Start on the <b>Free plan</b> — no credit card. Upgrade any time to remove ads and unlock more.</p>
+    </div>
+
+    {% if error %}
+    <div class="err-box show" style="display:block">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('signup') }}" class="card mt16">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" required maxlength="80" placeholder="Ada Lovelace" autocomplete="name">
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required minlength="8" placeholder="At least 8 characters" autocomplete="new-password">
+        <p class="hint">At least 8 characters. Passwords are stored hashed (werkzeug scrypt).</p>
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" type="submit">Create free account</button>
+    </form>
+
+    <p class="foot">Already have an account? <a href="{{ url_for('login') }}">Sign in</a></p>
+
+    {% if DEMO_MODE %}
+    <div class="demo-note">
+      <b>Demo mode.</b> This is a demo build with instant upgrades and seeded ads. A seeded demo
+      admin (admin@cryptopegion.local) can manage the ad system from the <b>Ads &amp; users</b> page.
+      Sign up to test the Free plan limits and account dashboard.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

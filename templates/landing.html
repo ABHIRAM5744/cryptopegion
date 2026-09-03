@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}CryptoPegion — Send encrypted files &amp; notes, free{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <div class="container inner">
+    <div class="pill">&#128274; Zero-knowledge encryption &middot; <b>Free</b> plan available</div>
+    <h1>Send anything. <span class="g">Encrypted in your browser.</span> Gone after it's read.</h1>
+    <p class="lead">CryptoPegion encrypts your files and notes before they leave your device, then deletes them from our servers after the view limit or expiry you choose. We never see the secret — only you can unlock it.</p>
+    <div class="ctas">
+      <a class="btn btn-primary btn-lg" href="{{ url_for('send_page') }}">Send a file or note</a>
+      <a class="btn btn-outline btn-lg" href="{{ url_for('pricing') }}">See plans — Free forever</a>
+    </div>
+    <div class="proof">
+      <div><b>1-click</b> sharing without an account</div>
+      <div><b>AES-256-GCM</b> client-side encryption</div>
+      <div><b>$0</b> to start &mdash; ad-supported</div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="features">
+  <div class="container">
+    <div class="section-title">
+      <div class="kicker">Why CryptoPegion</div>
+      <h2>Privacy that's actually easy to use</h2>
+      <p>You transfer huge files and secret notes every day. CryptoPegion makes sure only the right person ever sees them — then they vanish.</p>
+    </div>
+    <div class="grid3">
+      <div class="feature-card">
+        <div class="ico">&#128274;</div>
+        <h3>Zero-knowledge by design</h3>
+        <p>The key is generated in your browser and lives only in the link's #fragment. Even if our servers were cracked, only ciphertext would leak.</p>
+      </div>
+      <div class="feature-card">
+        <div class="ico">&#9203;</div>
+        <h3>Self-destructing transfers</h3>
+        <p>Pick how many views a transfer survives, or set it to expire in minutes, hours or days. The server deletes it — no one can reopen it later.</p>
+      </div>
+      <div class="feature-card">
+        <div class="ico">&#128196;</div>
+        <h3>Notes &amp; files in one go</h3>
+        <p>Type a secret message, attach a file, or both. One encrypted package, one beautiful link to share anywhere.</p>
+      </div>
+      <div class="feature-card">
+        <div class="ico">&#128104;&#8205;&#128104;&#8205;&#128103;&#8205;&#128102;</div>
+        <h3>Brand it like you own it</h3>
+        <p>Ultimate and Teams plans put your name and color on every transfer page — perfect for sending client work.</p>
+      </div>
+      <div class="feature-card">
+        <div class="ico">&#128179;</div>
+        <h3>Free, sponsored, honest</h3>
+        <p>Our Free plan is ad-supported so it can stay $0 forever. Prefer a clean experience? Ultimate removes every ad.</p>
+      </div>
+      <div class="feature-card">
+        <div class="ico">&#128247;</div>
+        <h3>Sign in, track everything</h3>
+        <p>Create an account to watch your monthly usage, revisit active transfers, and upgrade to bigger limits in a click.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="how">
+  <div class="container">
+    <div class="section-title">
+      <div class="kicker">How it works</div>
+      <h2>Three steps. No account needed to send.</h2>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h3>Write or drop</h3>
+        <p>Type a note, drag in a file — CryptoPegion encrypts it with a fresh key in your browser.</p>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3>Share the link</h3>
+        <p>Send the link by email, chat or pigeon. The decryption key travels inside the link — never to our server.</p>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3>It self-destructs</h3>
+        <p>After the views or time you chose, the transfer is deleted from our servers everywhere.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="pricing">
+  <div class="container">
+    <div class="section-title">
+      <div class="kicker">Pricing</div>
+      <h2>Simple plans. Free to start.</h2>
+      <p>Pay only if you need more. Every plan includes zero-knowledge AES-256 encryption and self-destructing transfers.</p>
+    </div>
+    {% include '_pricing.html' %}
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="cta-band">
+      <h2>How can CryptoPegion be free?</h2>
+      <p style="max-width:560px;margin:0 auto 22px">Sponsors. The Free plan shows a small, tasteful ad so occasional users never pay a cent. Upgrade to Ultimate or Teams and the ads disappear for good.</p>
+      <div class="ctas" style="justify-content:center;display:flex;gap:14px">
+        <a class="btn btn-white btn-lg" href="{{ url_for('send_page') }}">Try it free</a>
+        <a class="btn btn-outline btn-lg" style="background:transparent;border-color:rgba(255,255,255,.5);color:#fff" href="{{ url_for('pricing') }}">Compare plans</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

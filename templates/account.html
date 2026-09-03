@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Your dashboard — CryptoPegion{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div class="container">
+    <h1>Hey, {{ user.name or user.email }}</h1>
+    <p>Your plan, monthly usage and active transfers.</p>
+  </div>
+</div>
+
+{% if request.args.get('burned') == '1' %}
+<div class="container"><div class="notice show">Transfer deleted. Its key was never stored, so it cannot be recovered.</div></div>
+{% endif %}
+
+{% if request.args.get('upgraded') == '1' %}
+<div class="container"><div class="notice show">
+  {% if STRIPE_ENABLED %}&#127881; Payment successful &mdash; your {{ user.plan }} subscription is active.{% else %}&#127881; You're on {{ user.plan }} now. <span class="small">(Demo build &mdash; no payment was collected.)</span>{% endif %}
+</div></div>
+{% endif %}
+{% if request.args.get('upgrade') == 'error' %}
+<div class="container"><div class="err-box show">We couldn't confirm your payment with Stripe. Your plan was not changed &mdash; check your card or try again.</div></div>
+{% endif %}
+{% if request.args.get('upgrade') == 'missing' %}
+<div class="container"><div class="err-box show">No checkout session was provided, so nothing was changed.</div></div>
+{% endif %}
+{% if request.args.get('upgrade') == 'mismatch' %}
+<div class="container"><div class="err-box show">That checkout session belongs to a different account, so it was not applied.</div></div>
+{% endif %}
+{% if request.args.get('upgrade') == 'pending' %}
+<div class="container"><div class="notice show">Your payment is still processing. Your plan activates automatically once Stripe confirms it.</div></div>
+{% endif %}
+
+<section class="section" style="padding-top:30px">
+  <div class="container">
+
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="k">Current plan</div>
+        <div class="v" style="text-transform:capitalize">{{ user.plan }}</div>
+        <div class="s">
+          {% if user.plan == 'free' %}Ad-supported &middot; <a href="{{ url_for('pricing') }}">upgrade</a>
+          {% elif user.plan == 'ultimate' %}Unlimited &middot; no ads &middot; branding
+          {% else %}Team workspace &middot; no ads &middot; branding{% endif %}
+        </div>
+        {% if user.plan != 'free' %}
+        <div class="s" style="margin-top:3px">
+          {% if STRIPE_ENABLED and user.stripe_status in ('active', 'trialing') %}Billed via Stripe &middot; subscription {{ user.stripe_status }}
+          {% elif STRIPE_ENABLED %}Stripe status: {{ user.stripe_status or 'pending' }}
+          {% elif DEMO_MODE %}Demo plan &mdash; no card on file{% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="stat">
+        <div class="k">Transfers this month</div>
+        {% if limits.transfers_month %}
+        <div class="v">{{ usage.transfers }}<span class="muted" style="font-size:1rem"> / {{ limits.transfers_month }}</span></div>
+        {% else %}<div class="v">&#8734;</div>{% endif %}
+        <div class="s">{{ usage.month }} &middot; {{ user.plan }} plan</div>
+        {% if limits.transfers_month %}<div class="meter"><i style="width:{{ [100, usage.transfers * 100 // limits.transfers_month] | min }}%"></i></div>{% endif %}
+      </div>
+
+      <div class="stat">
+        <div class="k">Volume this month</div>
+        {% if limits.bytes_month %}
+        <div class="v">{{ (usage.bytes / 1073741824) | round(2) }}<span class="muted" style="font-size:1rem"> GB</span></div>
+        {% else %}<div class="v">&#8734;</div>{% endif %}
+        {% if limits.bytes_month %}<div class="s">of {{ (limits.bytes_month / 1073741824) | round(0) | int }} GB on {{ user.plan }}</div>
+        {% else %}<div class="s">no monthly volume cap</div>{% endif %}
+        {% if limits.bytes_month %}<div class="meter"><i style="width:{{ [100, usage.bytes * 100 // limits.bytes_month] | min }}%"></i></div>{% endif %}
+      </div>
+
+      <div class="stat">
+        <div class="k">Files this month</div>
+        <div class="v">{{ usage.files }}</div>
+        <div class="s">shared across {{ usage.transfers }} transfer{{ 's' if usage.transfers != 1 }} in {{ usage.month }}</div>
+      </div>
+    </div>
+
+    <div class="two-col" style="margin-top:26px">
+      <div class="panel" style="padding:22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <h2 style="font-size:1.15rem;font-weight:800">Your transfers</h2>
+          <a class="btn btn-primary btn-sm" href="{{ url_for('send_page') }}">+ Send new</a>
+        </div>
+
+        {% if notes %}
+        <div class="table-wrap">
+          <table class="list">
+            <thead><tr><th>Created</th><th>Type</th><th>Views left</th><th>Expiry</th><th></th></tr></thead>
+            <tbody>
+            {% for n in notes %}
+              <tr>
+                <td style="white-space:nowrap">{{ n.created_at | int | ctime }}</td>
+                <td>{% if n.has_file %}{% if n.file_count and n.file_count > 1 %}&#128196; {{ n.file_count }} files{% else %}&#128196; File{% endif %}{% else %}&#128221; Note{% endif %}</td>
+                <td>{{ n.views_left }} / {{ n.max_views }}</td>
+                <td style="white-space:nowrap">
+                  {% if n.expires_at %}{% set left = n.ttl_left_sec %}{% if left <= 0 %}expiring now{% elif left >= 3600 %}{{ (left / 3600) | round(1) }}h left{% else %}{{ (left / 60) | round(0) | int }} min left{% endif %}{% else %}No expiry{% endif %}
+                </td>
+                <td>
+                  <form method="post" action="{{ url_for('account_burn') }}"
+                        onsubmit="return confirm('Delete this transfer from the server now?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="note_id" value="{{ n.id }}">
+                    <button class="btn btn-danger btn-sm" type="submit">Burn</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted mt16">The decryption key is only ever in the link you created — it is not stored here, so it can't be listed or re-shared from this page.</p>
+        {% else %}
+        <p class="muted" style="padding:8px 0">No active transfers yet. <a href="{{ url_for('send_page') }}">Send your first one</a> — it takes seconds and needs no setup.</p>
+        {% endif %}
+      </div>
+
+      <div>
+        <div class="panel" style="padding:22px">
+          <h2 style="font-size:1.15rem;font-weight:800;margin-bottom:6px">
+            {% if user.plan == 'ultimate' or user.plan == 'teams' %}Plan &amp; billing{% else %}Upgrade your plan{% endif %}
+          </h2>
+          {% if user.plan == 'ultimate' or user.plan == 'teams' %}
+            {% if user.plan == 'ultimate' %}
+            <p class="small muted">You're on Ultimate — unlimited transfers, no ads, custom branding enabled. <a href="{{ url_for('pricing') }}">Compare Teams</a> if you collaborate with a group.</p>
+            {% else %}
+            <p class="small muted">You're on Teams — everything in Ultimate, shared with your team. <a href="{{ url_for('pricing') }}">See plan details</a>.</p>
+            {% endif %}
+            <div class="small" style="margin-top:10px;background:var(--surface-2);border:1px dashed var(--line);border-radius:10px;padding:9px 12px">
+              {% if STRIPE_ENABLED and user.stripe_status in ('active', 'trialing') %}
+                Billing: <b>Stripe subscription {{ user.stripe_status }}</b> &middot; billed monthly. Cancel any time below.
+              {% elif STRIPE_ENABLED %}
+                Billing: Stripe status is <b>{{ user.stripe_status or 'pending' }}</b>.
+              {% elif DEMO_MODE %}
+                Billing: <b>demo build</b> — activated without a payment. Set <span class="mono">STRIPE_SECRET_KEY</span> (and price IDs) to take real Stripe payments.
+              {% else %}
+                Billing is not enabled on this build.
+              {% endif %}
+            </div>
+            <form method="post" action="{{ url_for('account_upgrade') }}" class="mt16"
+                  onsubmit="return confirm('Downgrade to Free? Paid features apply changes immediately.')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="plan" value="free">
+              <button class="btn btn-outline btn-sm" type="submit">{% if STRIPE_ENABLED %}Cancel subscription &amp; {% endif %}switch to Free</button>
+            </form>
+          {% else %}
+            <p class="small muted">Free is supported by ads. Ultimate removes them, unlocks custom branding and removes every cap.</p>
+            {% for key in plan_order %}
+              {% if key != 'free' and key != user.plan %}
+              {% set p = plans[key] %}
+              <div class="option" style="margin-top:12px">
+                <div>
+                  <div class="name">{{ p.label }} <span class="muted" style="font-weight:500">— ${{ p.price }}{% if key == 'teams' %} /user/mo{% else %} /mo{% endif %}</span></div>
+                  <div class="hint">{% if key == 'ultimate' %}Unlimited transfers &amp; volume, no ads, branding{% else %}Everything in Ultimate, for up to 50 teammates{% endif %}</div>
+                </div>
+                <form method="post" action="{{ url_for('account_upgrade') }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="plan" value="{{ key }}">
+                  <button class="btn btn-sm{% if key == 'ultimate' %} btn-primary{% else %} btn-outline{% endif %}" type="submit">
+                    {% if STRIPE_ENABLED %}Upgrade to {{ p.label }}{% else %}Try {{ p.label }}{% endif %}
+                  </button>
+                </form>
+              </div>
+              {% endif %}
+            {% endfor %}
+            {% if STRIPE_ENABLED %}
+            <p class="small muted mt16">Upgrades are billed securely by Stripe as a monthly subscription. You'll land back here after checkout, and you can cancel any time.</p>
+            {% elif DEMO_MODE %}
+            <p class="small muted mt16">Demo build: plan switches are instant and no payment is collected. To take real payments, set <span class="mono">STRIPE_SECRET_KEY</span>, <span class="mono">STRIPE_PRICE_ULTIMATE</span> / <span class="mono">STRIPE_PRICE_TEAMS</span> and <span class="mono">STRIPE_WEBHOOK_SECRET</span>, then restart.</p>
+            {% else %}
+            <p class="small muted mt16">Live billing isn't enabled on this build — set <span class="mono">STRIPE_SECRET_KEY</span> to accept payments.</p>
+            {% endif %}
+          {% endif %}
+        </div>
+
+        {% if user.plan == 'free' %}
+        <div class="card mt16" style="background:var(--surface-2);border-style:dashed">
+          <h2 style="font-size:1.05rem;font-weight:800">Why upgrade?</h2>
+          <ul class="plan-features" style="margin:10px 0 0">
+            <li><span class="tick">&#10003;</span> Remove all ads for you <b>and</b> your recipients</li>
+            <li><span class="tick">&#10003;</span> Custom branding on transfer pages</li>
+            <li><span class="tick">&#10003;</span> Unlimited transfers &middot; 30-day expiry &middot; 64 MB payloads</li>
+          </ul>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

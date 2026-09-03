@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Encrypted transfer — CryptoPegion{% endblock %}
+{% block head %}
+<style>
+  .note-shell { max-width: 640px; margin: 0 auto; padding: 26px 0 60px; }
+  .note-shell .receive-head { margin-bottom: 6px; }
+  .receive-head .kicker { font-size:.8rem; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--brand); }
+  .receive-head h1 { font-size:1.55rem; font-weight:800; letter-spacing:-.4px; }
+  .receive-head p { color: var(--muted); font-size:.95rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container note-shell">
+  <div class="receive-head">
+    <div class="kicker">Private transfer</div>
+    <h1>You received something secure</h1>
+    <p>It decrypts only in your browser — CryptoPegion cannot read it.</p>
+  </div>
+
+  {% if ENABLE_ADS %}
+  <div class="ad-slot" data-ad="receiver"><div class="inner"></div></div>
+  {% endif %}
+
+  <div class="card" style="margin-top:14px">
+    <div class="brand-bar" id="brandBar" style="display:{{ 'flex' if brand_name else 'none' }}">
+      <span class="dot" id="brandDot"{% if brand_color %} style="background:{{ brand_color }}"{% endif %}></span>
+      <span><span id="brandName">{{ brand_name or '' }}</span> <span class="by">sent this with CryptoPegion</span></span>
+    </div>
+
+    <div id="liveView">
+      <p class="muted" id="status" style="margin-bottom:4px">Checking this transfer...</p>
+
+      <div class="note-box" id="noteBox"></div>
+
+      <div class="file-list" id="fileList" style="display:none;margin-top:14px"></div>
+
+      <div class="actions" style="margin-top:18px">
+        <button class="btn btn-danger btn-sm" id="burnBtn" type="button">Burn now &mdash; delete immediately</button>
+      </div>
+      <div class="err-box" id="err"></div>
+    </div>
+
+    <div class="dead" id="deadView" style="display:none">
+      <div class="icon" id="deadIcon">&#128465;</div>
+      <h2 id="deadTitle">This transfer is gone</h2>
+      <p id="deadMsg">It was deleted after its view limit was reached, it expired, or it never existed. There is nothing to recover — that is the point.</p>
+    </div>
+  </div>
+
+  <p class="small muted center" style="margin-top:18px">Free recipients see a small sponsor message on this page. <a href="{{ url_for('pricing') }}">Upgrade to Ultimate to remove ads</a> on every transfer you send.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const NOTE_ID = location.pathname.split('/').pop();
+  let key = null, currentFiles = [];
+
+  function showDead(icon, title, msg) {
+    $('liveView').style.display = 'none';
+    $('deadView').style.display = 'block';
+    $('deadIcon').innerHTML = icon;
+    $('deadTitle').textContent = title;
+    $('deadMsg').textContent = msg;
+  }
+  function fail(msg) {
+    const e = $('err'); e.textContent = msg; e.classList.add('show');
+  }
+
+  async function init() {
+    const frag = location.hash.slice(1);
+    if (!frag) return showDead('&#128273;', 'Missing key',
+      'This link has no decryption key in it. It may have been truncated by a messenger that strips the #fragment part of URLs.');
+    try {
+      key = await crypto.subtle.importKey('raw', urlB64ToBuf(frag), { name: 'AES-GCM' }, false, ['decrypt']);
+    } catch (e) {
+      return showDead('&#128273;', 'Bad key', 'The key fragment in this link is invalid.');
+    }
+
+    try {
+      const meta = await fetch('/api/notes/' + encodeURIComponent(NOTE_ID) + '/meta').then(r => r.json());
+      if (!meta.exists) {
+        return showDead('&#128465;', 'This transfer is gone',
+          'It was deleted after its view limit was reached, it expired, or it never existed.');
+      }
+      if (meta.brand_name && meta.brand_color) {
+        $('brandDot').style.background = meta.brand_color;
+        $('brandName').textContent = meta.brand_name;
+        $('brandBar').style.display = 'flex';
+      }
+      const status = $('status');
+      const nfiles = (meta.file_count > 0) ? meta.file_count : (meta.has_file ? 1 : 0);
+      if (nfiles > 1) {
+        status.innerHTML = 'This transfer contains <b>' + nfiles + ' files</b>. Opening it uses <b>1 of ' +
+          meta.views_left + '</b> allowed view' + (meta.views_left === 1 ? '' : 's') + '.';
+      } else if (nfiles === 1) {
+        status.innerHTML = 'This transfer contains a file. Opening it uses <b>1 of ' +
+          meta.views_left + '</b> allowed view' + (meta.views_left === 1 ? '' : 's') + '.';
+      } else {
+        status.innerHTML = 'Opening this transfer uses <b>1 of ' + meta.views_left +
+          '</b> allowed view' + (meta.views_left === 1 ? '' : 's') + '.';
+      }
+      const b = document.createElement('button');
+      b.className = 'btn btn-primary btn-lg btn-block';
+      b.id = 'openBtn'; b.style.marginTop = '16px';
+      b.textContent = 'Open &amp; decrypt'.replace('&amp;', '&');
+      b.addEventListener('click', openNote);
+      $('burnBtn').parentNode.insertBefore(b, $('burnBtn'));
+    } catch (e) {
+      /* meta is only a pre-check — fall through and try to open anyway */
+    }
+  }
+
+  async function openNote() {
+    const btn = $('openBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Decrypting...'; }
+    try {
+      const res = await fetch('/api/notes/' + encodeURIComponent(NOTE_ID) + '/open', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 410 && data.error === 'expired') {
+          return showDead('&#9203;', 'Transfer expired',
+            'Its time limit ran out and it was deleted from the server.');
+        }
+        return showDead('&#128465;', 'This transfer is gone',
+          'It was deleted after its view limit was reached, it expired, or it never existed.');
+      }
+
+      const iv = urlB64ToBuf(data.iv);
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, urlB64ToBuf(data.ct));
+      const payload = JSON.parse(new TextDecoder().decode(plain));
+
+      $('noteBox').textContent = payload.note || '';
+      if (payload.note) $('noteBox').style.display = 'block';
+
+      if (data.brand_name && data.brand_color) {
+        $('brandDot').style.background = data.brand_color;
+        $('brandName').textContent = data.brand_name;
+        $('brandBar').style.display = 'flex';
+      }
+
+      if (btn) btn.remove();
+      const status = $('status');
+      status.innerHTML = data.burned
+        ? '&#128276; Decrypted. This was the <b>last allowed view</b> — the transfer has been deleted from the server.'
+        : '&#128276; Decrypted. <b>' + data.views_left + '</b> view' +
+          (data.views_left === 1 ? ' remains' : 's remain') + ' before the transfer is deleted.';
+
+      currentFiles = [];
+      if (Array.isArray(payload.files)) {
+        payload.files.forEach((f) => currentFiles.push({ name: f.name,
+          type: f.type || 'application/octet-stream', data: urlB64ToBuf(f.data) }));
+      } else if (payload.file) {
+        currentFiles.push({ name: payload.file.name,
+          type: payload.file.type || 'application/octet-stream', data: urlB64ToBuf(payload.file.data) });
+      }
+      if (currentFiles.length) {
+        const list = $('fileList');
+        list.innerHTML = '';
+        currentFiles.forEach((f, i) => {
+          const row = document.createElement('div');
+          row.className = 'file-row';
+          const nm = document.createElement('span');
+          nm.className = 'fname'; nm.textContent = '\ud83d\udcc6 ' + f.name;
+          const meta = document.createElement('span');
+          meta.className = 'fmeta'; meta.textContent = CP.fmtSize(f.data.byteLength);
+          const btn = document.createElement('button');
+          btn.type = 'button'; btn.className = 'btn btn-primary btn-sm';
+          btn.textContent = 'Download'; btn.dataset.idx = String(i);
+          row.appendChild(nm); row.appendChild(meta); row.appendChild(btn);
+          list.appendChild(row);
+        });
+        list.style.display = 'flex';
+      }
+      if (data.burned) $('burnBtn').style.display = 'none';
+    } catch (e) {
+      fail('Decryption failed: wrong or corrupted key. ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'Open & decrypt'; }
+    }
+  }
+
+  $('fileList').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-idx]');
+    if (!btn) return;
+    const f = currentFiles[parseInt(btn.dataset.idx, 10)];
+    if (!f) return;
+    const url = URL.createObjectURL(new Blob([f.data], { type: f.type }));
+    const a = document.createElement('a');
+    a.href = url; a.download = f.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  });
+
+  $('burnBtn').addEventListener('click', async () => {
+    $('burnBtn').disabled = true;
+    try { await fetch('/api/notes/' + encodeURIComponent(NOTE_ID) + '/burn', { method: 'POST' }); } catch (e) {}
+    showDead('&#128293;', 'Burned',
+      'The transfer was deleted from the server. Nobody can open it now, including us.');
+  });
+
+  init();
+})();
+</script>
+{% endblock %}

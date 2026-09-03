@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Ads &amp; users — CryptoPegion admin{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div class="container">
+    <h1>Ad manager &amp; users</h1>
+    <p>Admin only. Paste AdSense snippets (or any ad HTML) into a slot, track impressions / clicks / CTR / revenue, and set user plans.</p>
+  </div>
+</div>
+
+{% set ns = namespace(imp=0, clk=0, rev=0.0) %}
+{% for a in ads %}{% set ns.imp = ns.imp + a.impressions %}{% set ns.clk = ns.clk + a.clicks %}{% set ns.rev = ns.rev + a.revenue %}{% endfor %}
+
+<section class="section" style="padding-top:26px">
+  <div class="container">
+
+    {% if request.args.get('saved') %}
+    <div class="notice show" style="display:block;margin-bottom:16px">Saved.</div>
+    {% endif %}
+
+    <div class="stat-grid">
+      <div class="stat"><div class="k">Impressions</div><div class="v">{{ '{:,}'.format(ns.imp) }}</div><div class="s">All active + inactive units</div></div>
+      <div class="stat"><div class="k">Clicks</div><div class="v">{{ '{:,}'.format(ns.clk) }}</div>
+        <div class="s">CTR {{ "%.2f" | format((ns.clk / ns.imp * 100) if ns.imp else 0) }}%</div></div>
+      <div class="stat"><div class="k">Est. revenue</div>
+        <div class="v">${{ "%.2f" | format(ns.rev) }}</div>
+        <div class="s">impressions &times; CPM &divide; 1000</div></div>
+      <div class="stat"><div class="k">Registered users</div><div class="v">{{ users | length }}</div><div class="s">Incl. the demo admin</div></div>
+    </div>
+
+    <div class="section-title" style="text-align:left;margin:34px 0 6px">
+      <div class="kicker">Monetization</div>
+      <h2 style="font-size:1.5rem">Ad units</h2>
+      <p style="margin:6px 0 0">Slots: <b>top_banner</b> (top of every page) &middot; <b>composer</b> (send page) &middot; <b>receiver</b> (transfer page). Free-plan viewers and guests see them; Ultimate/Teams users don't.</p>
+    </div>
+
+    <div class="admin-grid" style="margin-top:18px">
+      {% for a in ads %}
+      <div class="ad-card">
+        <div class="top">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <b>{{ a.name }}</b>
+            <span class="chip" style="text-transform:none">{{ a.slot }}</span>
+            {% if a.active %}<span class="chip" style="background:#ecfdf5;color:#065f46;border-color:#a7f3d0">active</span>
+            {% else %}<span class="chip" style="background:#fef2f2;color:#b91c1c;border-color:#fecaca">paused</span>{% endif %}
+          </div>
+          <details style="font-size:.85rem">
+            <summary style="cursor:pointer;color:var(--brand)">Edit</summary>
+            <form method="post" action="{{ url_for('admin_ad_save', ad_id=a.id) }}" class="mt16" style="display:grid;gap:10px">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="text" name="name" value="{{ a.name }}" aria-label="Ad name">
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <select name="slot" aria-label="Slot" style="flex:1;min-width:140px">
+                  {% for s in ['top_banner','composer','receiver'] %}
+                  <option value="{{ s }}"{% if a.slot == s %} selected{% endif %}>{{ s }}</option>
+                  {% endfor %}
+                </select>
+                <input type="url" name="url" value="{{ a.url }}" placeholder="https:// link" style="flex:2;min-width:200px" aria-label="Destination URL">
+                <input type="number" step="0.1" min="0" name="cpm" value="{{ a.cpm }}" style="width:110px" aria-label="CPM USD">
+              </div>
+              <textarea name="code" rows="3" aria-label="Ad HTML">{{ a.code }}</textarea>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+                <label class="checkline"><input type="checkbox" name="active" {% if a.active %}checked{% endif %}> Active</label>
+                <span class="actions">
+                  <button class="btn btn-outline btn-sm" type="submit">Save changes</button>
+                  <button class="btn btn-danger btn-sm" type="submit" formaction="{{ url_for('admin_ad_delete', ad_id=a.id) }}"
+                          onclick="return confirm('Delete this ad unit?')">Delete</button>
+                </span>
+              </div>
+            </form>
+          </details>
+        </div>
+        <div class="ad-stats">
+          <span>Impressions <b>{{ '{:,}'.format(a.impressions) }}</b></span>
+          <span>Clicks <b>{{ '{:,}'.format(a.clicks) }}</b></span>
+          <span>CTR <b>{{ "%.2f" | format(a.ctr) }}%</b></span>
+          <span>CPM <b>${{ "%.2f" | format(a.cpm) }}</b></span>
+          <span>Est. revenue <b>${{ "%.2f" | format(a.revenue) }}</b></span>
+        </div>
+        <p class="small muted mt8" style="word-break:break-all">{{ a.code | truncate(160) }}</p>
+      </div>
+      {% else %}
+      <p class="muted">No ad units yet — add one below.</p>
+      {% endfor %}
+    </div>
+
+    <div class="card mt24">
+      <h3 style="font-size:1.1rem;font-weight:800;margin-bottom:14px">Add an ad unit</h3>
+      <form method="post" action="{{ url_for('admin_ad_add') }}" style="display:grid;gap:12px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <input type="text" name="name" placeholder="Ad name (e.g. AdSense leaderboard)" style="flex:2;min-width:220px">
+          <select name="slot" style="flex:1;min-width:150px">
+            {% for s in ['top_banner','composer','receiver'] %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+          </select>
+          <input type="url" name="url" placeholder="https:// click URL (optional)" style="flex:2;min-width:200px">
+          <input type="number" step="0.1" min="0" name="cpm" placeholder="CPM $" value="2.00" style="width:110px">
+        </div>
+        <textarea name="code" rows="3" placeholder="Paste your AdSense / ad HTML here (trusted admin content)" required></textarea>
+        <div><button class="btn btn-primary" type="submit">Add unit</button>
+          <p class="small muted mt8">Tip: use <span class="mono">&lt;a class="demo-ad" href="..."&gt;&lt;b&gt;Sponsored&lt;/b&gt; text&lt;/a&gt;</span> for a clean text unit, or paste a full AdSense snippet.</p>
+        </div>
+      </form>
+    </div>
+
+    <div class="section-title" style="text-align:left;margin:38px 0 6px">
+      <div class="kicker">Accounts</div>
+      <h2 style="font-size:1.5rem">Users &amp; plans</h2>
+      <p style="margin:6px 0 0">Set any user's plan (Free / Ultimate / Teams) or admin flag. Changes apply immediately.</p>
+    </div>
+
+    <div class="panel mt16" style="padding:8px 18px 18px">
+      <div class="table-wrap">
+        <table class="list">
+          <thead><tr><th>Name</th><th>Email</th><th>Joined</th><th>Plan &amp; admin</th></tr></thead>
+          <tbody>
+          {% for u in users %}
+            <tr>
+              <td>{{ u.name or '—' }}</td>
+              <td>{{ u.email }}</td>
+              <td style="white-space:nowrap">{{ u.created_at | int | ctime }}</td>
+              <td>
+                {% if u.id == user.id %}
+                <span class="chip">That's you ({{ plans[u.plan].label }}{% if u.admin %}, admin{% endif %})</span>
+                {% else %}
+                <form method="post" action="{{ url_for('admin_user_save', user_id=u.id) }}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <select name="plan" style="width:130px">
+                    {% for key in plan_order %}
+                    <option value="{{ key }}"{% if u.plan == key %} selected{% endif %}>{{ plans[key].label }}</option>
+                    {% endfor %}
+                  </select>
+                  <label class="checkline" style="white-space:nowrap"><input type="checkbox" name="admin" {% if u.admin %}checked{% endif %}> admin</label>
+                  <button class="btn btn-outline btn-sm" type="submit">Save</button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="small muted mt8">You cannot change your own row ({{ user.email }}) from this screen.</p>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

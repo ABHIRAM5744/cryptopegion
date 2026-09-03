@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+{% block title %}Send an encrypted file or note — CryptoPegion{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div class="container">
+    <h1>Send an encrypted file or note</h1>
+    <p>Encrypted in your browser before upload &middot; the key stays in your link, never on our server.</p>
+  </div>
+</div>
+
+<section class="section" style="padding-top:34px">
+  <div class="container" style="max-width:680px">
+
+    {% if ENABLE_ADS %}
+    <div class="ad-slot" data-ad="composer"><div class="inner"></div></div>
+    {% endif %}
+
+    <div class="card">
+      <div class="field">
+        <label for="note">Your message <span class="muted" style="text-transform:none;font-weight:500">(optional if you attach a file)</span></label>
+        <textarea id="note" rows="6" placeholder="Type your secret note here..."></textarea>
+      </div>
+
+      <div class="option">
+        <div>
+          <div class="name">Attach a file</div>
+          <div class="hint">Encrypted together with your note, max 10 MB on Free</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="fileToggle"><span class="slider"></span></label>
+      </div>
+
+      <div id="fileArea" style="display:none">
+        <label class="filebox" id="fileBox">
+          <input type="file" id="fileInput" multiple>
+          <span id="fileText">Click to choose files, or drop them here</span>
+        </label>
+        <div id="fileList" style="display:none;margin-top:10px"></div>
+        <p class="small muted" id="sizeHint" style="margin-top:6px"></p>
+      </div>
+
+      <div class="option">
+        <div>
+          <div class="name">Advanced</div>
+          <div class="hint">Set a view limit or auto-expiry for the transfer</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="advToggle"><span class="slider"></span></label>
+      </div>
+
+      <div id="advancedPanel" style="display:none">
+        <div class="suboption">
+          <div>
+            <div class="name">Delete after views</div>
+            <div class="hint muted small">Removed everywhere after this many opens</div>
+          </div>
+          <input type="number" id="maxViews" value="1" min="1" max="100" style="width:90px">
+        </div>
+        <div class="suboption">
+          <div>
+            <div class="name">Auto-expire</div>
+            <div class="hint muted small">Even if it is never opened</div>
+          </div>
+          <span style="display:flex;align-items:center;gap:10px">
+            <label class="switch"><input type="checkbox" id="ttlToggle"><span class="slider"></span></label>
+            <select id="ttlValue" disabled style="width:130px"></select>
+          </span>
+        </div>
+      </div>
+
+      <div class="option" id="brandRow" data-paid style="display:none;margin-top:14px">
+        <div>
+          <div class="name">Custom branding</div>
+          <div class="hint">Recipients see your name and color instead of the CryptoPegion header</div>
+        </div>
+      </div>
+      <div id="brandFields" style="display:none">
+        <div class="suboption">
+          <div style="flex:1"><input type="text" id="brandName" maxlength="60" placeholder="Your name / brand"></div>
+          <input type="color" id="brandColor" value="#4f46e5" aria-label="Brand color">
+        </div>
+      </div>
+
+      <div id="planNote" class="notice" style="margin-top:14px"></div>
+
+      <button class="btn btn-primary btn-block btn-lg" id="createBtn" style="margin-top:18px">Create Secure Link</button>
+      <div class="err-box" id="err"></div>
+
+      <div class="result-box" id="result">
+        <div class="warn">&#9998; Copy the link now — the decryption key in it cannot be recovered later, by anyone.</div>
+        <input type="text" id="shareLink" class="mono" readonly style="width:100%;margin-bottom:10px">
+        <div class="actions">
+          <button class="btn btn-outline btn-sm" id="copyBtn" type="button">Copy link</button>
+          <button class="btn btn-ghost btn-sm" id="resetBtn" type="button">Create another</button>
+        </div>
+      </div>
+
+      <p class="small muted mt16" style="text-align:center">Free plan: 10 transfers &amp; up to 3 GB per month &middot; No account needed to send</p>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const TTL_PRESETS = [
+    [5, '5 minutes'], [60, '1 hour'], [1440, '1 day'], [4320, '3 days'],
+    [10080, '7 days'], [43200, '30 days']
+  ];
+  const MB = 1024 * 1024;
+  let ME = null;
+  const FILES = [];
+
+  function toggle(sw, area) { area.style.display = sw.checked ? 'block' : 'none'; }
+  function fail(msg) {
+    const e = $('err'); e.textContent = msg; e.classList.add('show');
+    $('createBtn').disabled = false;
+  }
+
+  function transferQuota() {
+    // Payload cap covers base64-expanded ciphertext; reserve ~1.4x headroom.
+    return Math.floor(((ME ? ME.limits.payload_mb : 10) * MB) / 1.4);
+  }
+  function renderFiles() {
+    const box = $('fileList');
+    box.innerHTML = '';
+    $('fileBox').classList.toggle('hasfile', FILES.length > 0);
+    if (!FILES.length) {
+      box.style.display = 'none';
+      $('sizeHint').textContent = 'Choose one or more files — they are encrypted together ' +
+        'into a single self-destructing transfer.';
+      return;
+    }
+    const total = FILES.reduce((s, f) => s + f.size, 0);
+    FILES.forEach((f, i) => {
+      const el = document.createElement('div');
+      el.className = 'file-row';
+      const nm = document.createElement('span');
+      nm.className = 'fname'; nm.textContent = f.name;
+      const meta = document.createElement('span');
+      meta.className = 'fmeta'; meta.textContent = CP.fmtSize(f.size);
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'fdel'; del.title = 'Remove file'; del.textContent = '\u2715';
+      del.addEventListener('click', () => { FILES.splice(i, 1); renderFiles(); });
+      el.appendChild(nm); el.appendChild(meta); el.appendChild(del);
+      box.appendChild(el);
+    });
+    box.style.display = 'flex';
+    $('sizeHint').textContent = FILES.length + ' file' + (FILES.length === 1 ? '' : 's') +
+      ' \u00b7 ' + CP.fmtSize(total) + ' combined (max ~' + CP.fmtSize(transferQuota()) + ' of raw files per transfer)';
+    $('err').classList.remove('show');
+  }
+  function addFiles(list) {
+    const quota = transferQuota();
+    let skipped = 0;
+    Array.from(list).forEach((f) => {
+      if (FILES.reduce((s, x) => s + x.size, 0) + f.size > quota) { skipped += 1; return; }
+      FILES.push(f);
+    });
+    renderFiles();
+    $('fileInput').value = '';
+    if (skipped) fail(skipped + ' file' + (skipped === 1 ? ' was' : 's were') +
+      ' skipped \u2014 the combined size would exceed your ~' + CP.fmtSize(quota) + ' limit.');
+  }
+
+  async function configure(me) {
+    ME = me;
+    const limits = me.limits;
+    const ttlMax = limits.ttl_max_min || 4320;
+    const sel = $('ttlValue');
+    sel.innerHTML = '';
+    TTL_PRESETS.forEach(([val, label]) => {
+      if (val > ttlMax) return;
+      const opt = document.createElement('option');
+      opt.value = val; opt.textContent = label;
+      if (val === (60 <= ttlMax ? 60 : TTL_PRESETS[0][0])) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    $('sizeHint').textContent = 'Choose one or more files \u2014 they are encrypted together ' +
+      'into one transfer (up to ' + limits.payload_mb + ' MB of encrypted payload, ~' +
+      Math.floor(limits.payload_mb / 1.4) + ' MB of raw files, on ' + limits.label + ').';
+    if (limits.branding) {
+      $('brandRow').style.display = 'flex';
+      $('brandFields').style.display = 'block';
+      if (me.name) $('brandName').value = me.name;
+    }
+    const note = $('planNote');
+    if (me.authed) {
+      if (me.plan === 'free') {
+        note.textContent = 'You are on the Free plan: ' + limits.transfers_month + ' transfers and ' +
+          (limits.bytes_month / (1024*1024*1024)).toFixed(0) + ' GB of volume this month. Upgrade for unlimited.';
+        note.classList.add('show');
+      } else {
+        note.textContent = me.plan === 'ultimate' ? 'Ultimate plan — unlimited transfers, no ads, custom branding active.'
+                                                  : 'Teams plan — unlimited transfers, no ads, custom branding active.';
+        note.classList.add('show');
+        note.style.background = '#eef2ff'; note.style.color = '#312e81';
+      }
+    }
+  }
+
+  async function createNote() {
+    $('err').classList.remove('show'); $('result').style.display = 'none';
+    const btn = $('createBtn'); btn.disabled = true; btn.textContent = 'Encrypting...';
+    try {
+      const note = $('note').value;
+      const useFile = $('fileToggle').checked;
+      const files = useFile ? FILES.slice() : [];
+      if (useFile && !files.length) return fail('File switch is ON \u2014 choose at least one file.');
+      if (!note && !files.length) return fail('Write a note or attach a file first.');
+
+      const payload = { note: note, files: [] };
+      for (const f of files) {
+        const buf = await f.arrayBuffer();
+        payload.files.push({ name: f.name, type: f.type || 'application/octet-stream',
+                             data: bufToB64(new Uint8Array(buf)) });
+      }
+
+      const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = new Uint8Array(await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv }, key,
+        new TextEncoder().encode(JSON.stringify(payload))));
+      const rawKey = new Uint8Array(await crypto.subtle.exportKey('raw', key));
+
+      const body = {
+        ct: bufToB64(ct),
+        iv: bufToB64(iv),
+        has_file: files.length > 0,
+        file_count: files.length,
+        max_views: Math.max(1, Math.min(100, parseInt($('maxViews').value, 10) || 1)),
+        ttl_minutes: $('ttlToggle').checked ? parseInt($('ttlValue').value, 10) : null
+      };
+      if (ME && ME.limits.branding) {
+        const bname = $('brandName').value.trim();
+        if (bname || $('brandRow').style.display !== 'none') {
+          body.brand_name = bname || null;
+          body.brand_color = $('brandColor').value || '#4f46e5';
+        }
+      }
+
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) return fail(data.error || ('Failed to create transfer (' + res.status + ')'));
+      if (res.status === 429) return fail(data.error);
+
+      const frag = b64ToUrlB64(bufToB64(rawKey));
+      $('shareLink').value = location.origin + data.path + '#' + frag;
+      $('result').style.display = 'block';
+      $('shareLink').select();
+    } catch (e) {
+      fail('Error: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Create Secure Link';
+    }
+  }
+
+  $('fileToggle').addEventListener('change', () => toggle($('fileToggle'), $('fileArea')));
+  $('advToggle').addEventListener('change', () => {
+    toggle($('advToggle'), $('advancedPanel'));
+    if (!$('advToggle').checked) $('ttlToggle').checked = false;
+    $('ttlValue').disabled = !$('ttlToggle').checked;
+  });
+  $('ttlToggle').addEventListener('change', () => {
+    $('ttlValue').disabled = !$('ttlToggle').checked;
+  });
+  $('fileBox').addEventListener('dragover', (e) => e.preventDefault());
+  $('fileBox').addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  });
+  $('fileInput').addEventListener('change', () => addFiles($('fileInput').files));
+  $('createBtn').addEventListener('click', createNote);
+  $('copyBtn').addEventListener('click', async () => {
+    const v = $('shareLink').value;
+    try { await navigator.clipboard.writeText(v); } catch (e) { $('shareLink').select(); document.execCommand('copy'); }
+    $('copyBtn').textContent = 'Copied!';
+    setTimeout(() => { $('copyBtn').textContent = 'Copy link'; }, 1500);
+  });
+  $('resetBtn').addEventListener('click', () => {
+    $('result').style.display = 'none';
+    $('shareLink').value = '';
+    $('note').value = '';
+    FILES.length = 0;
+    renderFiles();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  window.CP.getMe().then(configure);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Sign in — CryptoPegion{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="page-head" style="text-align:left;padding:0 0 6px">
+      <h1>Welcome back</h1>
+      <p>Sign in to view your transfers, usage and plan.</p>
+    </div>
+
+    {% if error %}
+    <div class="err-box show" style="display:block">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('login') }}" class="card mt16">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" type="submit">Sign in</button>
+    </form>
+
+    <p class="foot">New to CryptoPegion? <a href="{{ url_for('signup') }}">Create a free account</a></p>
+
+    {% if DEMO_MODE %}
+    <div class="demo-note">
+      <b>Demo mode.</b> Seeded demo admin &mdash; <span class="mono">admin@cryptopegion.local</span>
+      / <span class="mono">demo-admin-123</span> &mdash; to try the ad manager and user plan editor.
+      Use <a href="{{ url_for('signup') }}">sign up</a> to create a normal Free-plan account.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

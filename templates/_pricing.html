@@ -1,0 +1,92 @@
+{# Pricing grid partial — shared by the landing page and /pricing.
+   Uses context: plans, plan_order, user, DEMO_MODE, STRIPE_ENABLED, csrf_token. #}
+<div class="plan-grid">
+{% for key in plan_order %}
+  {% set p = plans[key] %}
+  <div class="plan-card{% if key == 'ultimate' %} featured{% endif %}">
+    {% if key == 'ultimate' %}<span class="ribbon">Most popular</span>{% endif %}
+
+    <div class="plan-name">
+      <h3>{{ p.label }}</h3>
+      {% if key == 'free' %}<span class="chip free">Free forever</span>
+      {% elif key == 'teams' %}<span class="chip teams">For teams</span>{% endif %}
+    </div>
+
+    {% if key == 'free' %}
+      <p class="plan-blurb">Perfect for occasional users or anyone exploring CryptoPegion for the first time.</p>
+      <div class="price">$0<span> / month</span></div>
+      <ul class="plan-features">
+        <li><span class="tick">&#10003;</span> 10 transfers per month</li>
+        <li><span class="tick">&#10003;</span> Share up to 3 GB per month</li>
+        <li><span class="tick">&#10003;</span> Transfer expiry up to 3 days</li>
+        <li><span class="tick">&#10003;</span> Up to 10 MB per transfer</li>
+        <li><span class="tick">&#10003;</span> AES-256 end-to-end encryption</li>
+        <li class="muted-opt"><span class="tick" style="color:var(--ad)">&#9679;</span> Ad-supported — a small ad keeps it free</li>
+        <li class="muted-opt"><span class="cross">&#10005;</span> No custom branding</li>
+      </ul>
+    {% elif key == 'ultimate' %}
+      <p class="plan-blurb">For people who send every day. The full CryptoPegion, with no caps and no ads.</p>
+      <div class="price">$23<span> / month, billed monthly</span></div>
+      <ul class="plan-features">
+        <li><span class="tick">&#10003;</span> Unlimited transfers and transfer volume</li>
+        <li><span class="tick">&#10003;</span> Transfer expiry up to 30 days</li>
+        <li><span class="tick">&#10003;</span> Up to 64 MB per transfer</li>
+        <li><span class="tick">&#10003;</span> Custom branding on your links</li>
+        <li><span class="tick">&#10003;</span> No ads — remove them completely</li>
+        <li><span class="tick">&#10003;</span> AES-256 end-to-end encryption</li>
+      </ul>
+    {% else %}
+      <p class="plan-blurb">Everything in Ultimate, organised for your whole team.</p>
+      <div class="price">$19<span> / user / month</span></div>
+      <p class="small muted">Billed monthly &middot; minimum 2 users</p>
+      <ul class="plan-features" style="margin-top:8px">
+        <li><span class="tick">&#10003;</span> Everything in Ultimate for your team</li>
+        <li><span class="tick">&#10003;</span> Up to 50 team members</li>
+        <li><span class="tick">&#10003;</span> Team workspace &amp; shared links</li>
+        <li><span class="tick">&#10003;</span> Centralized billing &amp; admin controls</li>
+        <li><span class="tick">&#10003;</span> Custom branding on your links</li>
+        <li><span class="tick">&#10003;</span> No ads — remove them completely</li>
+      </ul>
+    {% endif %}
+
+    <div>
+    {% if user %}
+      {% if user.plan == key %}
+        <button class="btn btn-block btn-outline" type="button" disabled>Your current plan</button>
+        {% if user.plan == 'free' %}
+          <p class="small muted center mt8">Upgrade any time — your ads disappear instantly.</p>
+        {% elif STRIPE_ENABLED and user.stripe_status in ('active', 'trialing') %}
+          <p class="small muted center mt8">Active Stripe subscription &middot; billed monthly, cancel any time.</p>
+        {% elif DEMO_MODE %}
+          <p class="small muted center mt8">Demo build — this plan is active without a payment.</p>
+        {% endif %}
+      {% elif key == 'free' and not DEMO_MODE %}
+        <a class="btn btn-block btn-outline" href="{{ url_for('account') }}">Manage your plan</a>
+      {% else %}
+        <form method="post" action="{{ url_for('account_upgrade') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="plan" value="{{ key }}">
+          <button class="btn btn-block{% if key == 'ultimate' %} btn-primary{% else %} btn-outline{% endif %}" type="submit">
+            {% if key == 'free' %}Switch to Free{% else %}Upgrade to {{ p.label }}{% endif %}
+          </button>
+        </form>
+        {% if key != 'free' %}
+          <p class="small muted center mt8">
+            {% if STRIPE_ENABLED %}Billed securely by Stripe &middot; monthly subscription &middot; cancel any time.
+            {% elif DEMO_MODE %}Demo build — instant upgrade, no payment collected. Set STRIPE_SECRET_KEY for real Stripe billing.
+            {% else %}Live billing isn't enabled on this build.
+            {% endif %}
+          </p>
+        {% endif %}
+      {% endif %}
+    {% else %}
+      <a class="btn btn-block{% if key == 'ultimate' %} btn-primary{% else %} btn-outline{% endif %}"
+         href="{{ url_for('signup') }}">
+        {% if key == 'free' %}Get started — it's free{% else %}Start free, upgrade later{% endif %}
+      </a>
+      <p class="small muted center mt8">{% if key == 'free' %}No credit card required.{% else %}Create a free account, then upgrade in your dashboard.{% endif %}</p>
+    {% endif %}
+    </div>
+  </div>
+{% endfor %}
+</div>
